@@ -1,7 +1,7 @@
 ### Preliminary Loading, Data Intake, Etc. ###
 # Load Libraries
 library(Amelia)
-
+library(multicore)
 # Import Raw Data
 MERS_Raw <- read.csv("cleaned_MERS_Jun4.csv")
 
@@ -45,6 +45,8 @@ MERS$sequence <- NULL
 MERS$accession <- NULL
 MERS$patient <- NULL
 MERS$speculation <- NULL
+MERS$contact <- NULL
+MERS$saudi <- NULL # Coded elsewhere
 
 ## Variable Recodes ##
 # Recode gender to be interpretable
@@ -53,11 +55,17 @@ MERS$female[MERS$gender=="M"] <- 0
 MERS$female[MERS$gender=="F"] <- 1
 MERS$gender <- NULL
 
-# Convert Date Variables to Dates
+# Convert Date Variables to Days Since 1/1/2012
+MERS$jan1 <- as.Date("2012-01-01")
 MERS$onset <- as.Date(MERS$onset)
+MERS$onset <- MERS$onset - MERS$jan1
 MERS$hospitalized <- as.Date(MERS$hospitalized)
+MERS$hospitalized <- MERS$hospitalized - MERS$jan1
 MERS$sampled <- as.Date(MERS$sampled,"%Y-%m-%d")
+MERS$sampled <- MERS$sampled - MERS$jan1
 MERS$reported <- as.Date(MERS$reported,"%Y-%m-%d")
+MERS$reported <- MERS$reported - MERS$jan1
+MERS$jan1 <-NULL
 
 # Create Two Lag Variables
 # Set to 0 if there is a negative value (preexisting hospitalization)
@@ -106,6 +114,35 @@ MERS$Death[MERS$condensed_health=="fatal"] <- 1
 MERS$Death[MERS$condensed_health=="Alive"] <- 0
 MERS$condensed_health <- NULL
 
+# Recode Severity to Numeric
+MERS$sev <- NA
+MERS$sev[MERS$severity2=="asymptomatic"] <- 0
+MERS$sev[MERS$severity2=="mild"] <- 1
+MERS$sev[MERS$severity2=="moderate"] <- 2
+MERS$sev[MERS$severity2=="severe"] <- 3MERS
+MERS$sev[MERS$severity2=="fatal"] <- 4
+MERS$severity2 <- MERS$sev
+MERS$sev <- NULL
+
+# Recode cluster to remove ? clusters
+MERS$cluster[MERS$cluster=="AJ?"] <- "AJ"
+MERS$cluster[MERS$cluster=="J?"] <- "J"
+MERS$cluster[MERS$cluster=="AK?"] <- "AK"
+MERS$cluster[MERS$cluster=="AN?"] <- "AN"
+
+### Multiple Imputation ###
+# Disable some date variables, causing singularity issues
+# Information is built into other variables
+MERS$hospitalized <- NULL
+MERS$sampled <- NULL
+MERS$reported <- NULL
+
+# Unimputed logistic model to provide starting values for later binomial models
+
+test <- summary(glm(Death ~ age + country
+            ,data=MERS, family=binomial(link=logit)))
+
+#mi.mers <- amelia(MERS, m=50, ords=c("city","country","cluster"), idvars="number",parallel="multicore",ncpus=2)
 
 
 
