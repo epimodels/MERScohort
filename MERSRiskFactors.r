@@ -2,6 +2,9 @@
 # Load Libraries
 library(Amelia)
 library(multicore)
+library(sandwich)
+library(lmtest)
+
 # Import Raw Data
 MERS_Raw <- read.csv("cleaned_MERS_Jun4.csv")
 
@@ -29,7 +32,8 @@ MERS$severity <- NULL
 MERS$outcome <- NULL
 MERS$clinical <- NULL
 
-# Keep only the new cluster variable
+# Delete cluster variables, middling-poor data quality
+MERS$cluster <- NULL
 MERS$old_cluster <- NULL
 MERS$Cauchemez.cluster <- NULL
 
@@ -46,7 +50,6 @@ MERS$accession <- NULL
 MERS$patient <- NULL
 MERS$speculation <- NULL
 MERS$contact <- NULL
-MERS$saudi <- NULL # Coded elsewhere
 
 ## Variable Recodes ##
 # Recode gender to be interpretable
@@ -59,12 +62,16 @@ MERS$gender <- NULL
 MERS$jan1 <- as.Date("2012-01-01")
 MERS$onset <- as.Date(MERS$onset)
 MERS$onset <- MERS$onset - MERS$jan1
+MERS$onset <- as.numeric(MERS$onset)
 MERS$hospitalized <- as.Date(MERS$hospitalized)
 MERS$hospitalized <- MERS$hospitalized - MERS$jan1
+MERS$hospitalized <- as.numeric(MERS$hospitalized)
 MERS$sampled <- as.Date(MERS$sampled,"%Y-%m-%d")
 MERS$sampled <- MERS$sampled - MERS$jan1
+MERS$sampled <- as.numeric(MERS$sampled)
 MERS$reported <- as.Date(MERS$reported,"%Y-%m-%d")
 MERS$reported <- MERS$reported - MERS$jan1
+MERS$reported <- as.numeric(MERS$reported)
 MERS$jan1 <-NULL
 
 # Create Two Lag Variables
@@ -119,16 +126,10 @@ MERS$sev <- NA
 MERS$sev[MERS$severity2=="asymptomatic"] <- 0
 MERS$sev[MERS$severity2=="mild"] <- 1
 MERS$sev[MERS$severity2=="moderate"] <- 2
-MERS$sev[MERS$severity2=="severe"] <- 3MERS
+MERS$sev[MERS$severity2=="severe"] <- 3
 MERS$sev[MERS$severity2=="fatal"] <- 4
 MERS$severity2 <- MERS$sev
 MERS$sev <- NULL
-
-# Recode cluster to remove ? clusters
-MERS$cluster[MERS$cluster=="AJ?"] <- "AJ"
-MERS$cluster[MERS$cluster=="J?"] <- "J"
-MERS$cluster[MERS$cluster=="AK?"] <- "AK"
-MERS$cluster[MERS$cluster=="AN?"] <- "AN"
 
 ### Multiple Imputation ###
 # Disable some date variables, causing singularity issues
@@ -137,18 +138,142 @@ MERS$hospitalized <- NULL
 MERS$sampled <- NULL
 MERS$reported <- NULL
 
-# Unimputed logistic model to provide starting values for later binomial models
+# Multiply impute with very small ridge prior to help with numerical stability
+# As per Honaker, King and Blackwell, allowing all integer-valued ordinal data to be modeled as continuous unless statistical
+# model requires a bound, as with dichotomous outcomes
+# Placing logical bound of (0, INF) on report delay
+bounds <- matrix(c(15, 0, 365), nrow = 1, ncol = 3)
+mi.mers <- amelia(MERS, m=100, ords=c("city","country","Death","severity2"), idvars="number",
+                  parallel="multicore",ncpus=4, p2s=2,empri = .01*nrow(MERS), bounds=bounds)
 
-test <- summary(glm(Death ~ age + country
-            ,data=MERS, family=binomial(link=logit)))
+### Outcome = Death ###
+# Univariate Binomial Models
+# Starting values obtained from logistic models
+# Age
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ age, family= poisson, data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+age_combined <- mi.meld(q = b.out, se = se.out)
+print(age_combined)
 
-#mi.mers <- amelia(MERS, m=50, ords=c("city","country","cluster"), idvars="number",parallel="multicore",ncpus=2)
+# Country and City is incapable of producing stable estimates
 
+# Onset
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ onset, family= poisson, data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+onset_combined <- mi.meld(q = b.out, se = se.out)
+print(onset_combined)
 
+# Comorbidity
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ comorbidity, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+comorb_combined <- mi.meld(q = b.out, se = se.out)
+print(comorb_combined)
 
+# Animal Contact
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ animal_contact, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+ani_combined <- mi.meld(q = b.out, se = se.out)
+print(ani_combined)
 
+# Camel Contact
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ camel_contact, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+cam_combined <- mi.meld(q = b.out, se = se.out)
+print(cam_combined)
 
+# HCW
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ HCW, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+hcw_combined <- mi.meld(q = b.out, se = se.out)
+print(hcw_combined)
 
+# Secondary
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ secondary, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+sec_combined <- mi.meld(q = b.out, se = se.out)
+print(sec_combined)
 
+# Saudi
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ saudi, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+saudi_combined <- mi.meld(q = b.out, se = se.out)
+print(saudi_combined)
 
+# Female
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ female, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+fem_combined <- mi.meld(q = b.out, se = se.out)
+print(fem_combined)
+
+# Hospital Delay
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ hosp_delay, family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+hosp_combined <- mi.meld(q = b.out, se = se.out)
+print(hosp_combined)
+
+# Multivariate Model
+# Including all marginally associated (p < 0.20) variables
+# Age, Comorbidity, Onset, Animal Contact, HCW, Secondary Case, Female
+# Not yet thrilled with these estimates
+
+b.out <- NULL
+se.out <- NULL
+for(i in 1:mi.mers$m){
+  uni.out <- glm(Death ~ age + onset + comorbidity + animal_contact + HCW + secondary + female, 
+                  family= poisson,data=mi.mers$imputations[[i]])
+  b.out <- rbind(b.out,uni.out$coef)
+  se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
+}
+multi_combined <- mi.meld(q = b.out, se = se.out)
+print(multi_combined)
 
