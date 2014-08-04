@@ -7,7 +7,7 @@ library(sandwich)
 library(lmtest)
 
 # Import Raw Data
-MERS_Raw <- read.csv("cleaned_MERS_Jun4.csv")
+MERS_Raw <- read.csv("clean_mers_July22.csv")
 
 ### Build Working Copy, Remove All Unneeded Variables ###
 MERS <- MERS_Raw
@@ -75,11 +75,11 @@ MERS$reported <- MERS$reported - MERS$jan1
 MERS$reported <- as.numeric(MERS$reported)
 MERS$jan1 <-NULL
 
-# Create Two Lag Variables
+# Create Hospitalization Delay Variable
 # Set to 0 if there is a negative value (preexisting hospitalization)
 MERS$hosp_delay <- MERS$hospitalized - MERS$onset
-MERS$hosp_delay[MERS$hosp_helay<0] <- 0
-MERS$report_delay <- MERS$reported - MERS$onset
+MERS$hosp_delay[MERS$hosp_delay<0] <- 0
+
 
 # Recode Comorbidity as 0/1
 MERS$comorb <- NA
@@ -138,13 +138,13 @@ MERS$hospitalized <- NULL
 MERS$sampled <- NULL
 MERS$reported <- NULL
 
+MERS$country <- NULL
+MERS$city <- NULL
+
 # Multiply impute with very small ridge prior to help with numerical stability
 # As per Honaker, King and Blackwell, allowing all integer-valued ordinal data to be modeled as continuous unless statistical
 # model requires a bound, as with dichotomous outcomes
-# Placing logical bound of (0, INF) on report delay
-bounds <- matrix(c(15, 0, 365), nrow = 1, ncol = 3)
-mi.mers <- amelia(MERS, m=100, ords=c("city","country","Death","sev"), idvars="number",
-                  parallel="multicore",ncpus=4, p2s=2,empri = .01*nrow(MERS), bounds=bounds)
+mi.mers <- amelia(MERS, m=100, ords=c("Death","sev"), idvars="number",parallel="multicore",ncpus=4, p2s=2,empri = .01*nrow(MERS))
 
 ### Outcome = Death ###
 # Univariate Binomial Models
@@ -159,8 +159,6 @@ for(i in 1:mi.mers$m){
 }
 age_combined <- mi.meld(q = b.out, se = se.out)
 print(age_combined)
-
-# Country and City is incapable of producing stable estimates
 
 # Onset
 b.out <- NULL
@@ -269,7 +267,7 @@ print(hosp_combined)
 b.out <- NULL
 se.out <- NULL
 for(i in 1:mi.mers$m){
-  uni.out <- glm(Death ~ age + onset + comorbidity + animal_contact + HCW + secondary + female, 
+  uni.out <- glm(Death ~ age + onset + comorbidity + animal_contact + secondary + female + HCW, 
                   family= poisson,data=mi.mers$imputations[[i]])
   b.out <- rbind(b.out,uni.out$coef)
   se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
@@ -277,7 +275,7 @@ for(i in 1:mi.mers$m){
 multi_combined <- mi.meld(q = b.out, se = se.out)
 print(multi_combined)
 
-### Outcome = Death ###
+### Outcome = Severe ###
 # Univariate Binomial Models
 # Age
 b.out <- NULL
@@ -404,3 +402,20 @@ for(i in 1:mi.mers$m){
 }
 smulti_combined <- mi.meld(q = b.out, se = se.out)
 print(smulti_combined)
+
+# Density Plotting
+Death1 <- subset(MERS, Death == 1)
+Death0 <- subset(MERS, Death == 0)
+
+Death1den <- density(Death1$age, na.rm=TRUE)
+Death0den <- density(Death0$age, na.rm=TRUE)
+
+par(mar=c(5.1,5.1,4.1,2.1))
+plot(Death1den, col="black", lwd = 3,xlab="Age (Years)",ylab = "Density", main="", cex.lab=1.5,axes=FALSE,xlim=c(0,100),ylim=c(0,0.030))
+axis(2, cex.axis=1.3, at=c(0.005,0.015,0.025),lwd=1)
+axis(1, cex.axis=1.3)
+box()
+lines(Death0den, col="grey75", lwd = 3)
+legend("topright", c("Fatal Cases","Non-Fatal Cases"), lwd=3, col=c("black","grey75"),
+       lty=c(1,1), pch=c(NA,NA), bty='n',inset=0.02, cex=1.3)
+
