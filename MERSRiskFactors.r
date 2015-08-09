@@ -7,10 +7,14 @@ library(sandwich)
 library(lmtest)
 
 # Import Raw Data
-MERS_Raw <- read.csv("clean_mers_July22.csv")
+MERS_Raw <- read.csv("cleaned_MERS_Aug4.csv")
+MERS_Raw$ROK <- 0
+MERS_Raw$ROK[MERS_Raw$country=="South Korea"] <- 1
 
 ### Build Working Copy, Remove All Unneeded Variables ###
-MERS <- MERS_Raw
+# Subset to non-ROK Cases
+MERS <- MERS_Raw[which(MERS_Raw$ROK==0),]
+MERS$ROK <- NULL
 MERS$X <- NULL
 MERS$FT <- NULL
 MERS$KSA_case <- NULL
@@ -51,6 +55,9 @@ MERS$accession <- NULL
 MERS$patient <- NULL
 MERS$speculation <- NULL
 MERS$contact <- NULL
+MERS$prior_travel <- NULL
+MERS$inferred <- NULL
+MERS$citation5 <- NULL
 
 ## Variable Recodes ##
 # Recode gender to be interpretable
@@ -80,7 +87,6 @@ MERS$jan1 <-NULL
 MERS$hosp_delay <- MERS$hospitalized - MERS$onset
 MERS$hosp_delay[MERS$hosp_delay<0] <- 0
 
-
 # Recode Comorbidity as 0/1
 MERS$comorb <- NA
 MERS$comorb[MERS$comorbidity=="FALSE"] <- 0
@@ -97,8 +103,8 @@ MERS$animal_contact <- MERS$ani
 MERS$ani <- NULL
 
 MERS$cam <- NA
-MERS$cam[MERS$camel_contact=="False"] <- 0
-MERS$cam[MERS$camel_contact=="True"] <- 1
+MERS$cam[MERS$camel_contact=="FALSE"] <- 0
+MERS$cam[MERS$camel_contact=="TRUE"] <- 1
 MERS$camel_contact <- MERS$cam
 MERS$cam <- NULL
 
