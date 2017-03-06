@@ -2,7 +2,8 @@
 set.seed(20380907)
 # Load Libraries
 library(Amelia)
-library(multicore)
+#library(multicore)
+library(snow)
 library(sandwich)
 library(lmtest)
 
@@ -150,7 +151,7 @@ MERS$city <- NULL
 # Multiply impute with very small ridge prior to help with numerical stability
 # As per Honaker, King and Blackwell, allowing all integer-valued ordinal data to be modeled as continuous unless statistical
 # model requires a bound, as with dichotomous outcomes
-mi.mers <- amelia(MERS, m=100, ords=c("Death","sev"), idvars="number",parallel="multicore",ncpus=4, p2s=2,empri = .01*nrow(MERS))
+mi.mers <- amelia(MERS, m=100, ords=c("Death","sev"), idvars="number",parallel="snow",ncpus=4, p2s=2,empri = .01*nrow(MERS))
 
 ### Outcome = Death ###
 # Univariate Binomial Models
