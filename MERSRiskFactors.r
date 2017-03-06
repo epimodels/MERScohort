@@ -2,7 +2,6 @@
 set.seed(20380907)
 # Load Libraries
 library(Amelia)
-#library(multicore)
 library(snow)
 library(sandwich)
 library(lmtest)
@@ -274,7 +273,7 @@ print(hosp_combined)
 b.out <- NULL
 se.out <- NULL
 for(i in 1:mi.mers$m){
-  uni.out <- glm(Death ~ age + onset + comorbidity + animal_contact + secondary + female + HCW, 
+  uni.out <- glm(Death ~ age + onset + comorbidity + female + HCW + hosp_delay, 
                   family= poisson,data=mi.mers$imputations[[i]])
   b.out <- rbind(b.out,uni.out$coef)
   se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
@@ -396,13 +395,13 @@ print(shosp_combined)
 
 # Multivariate Model
 # Including all marginally associated (p < 0.20) variables
-# Age, Comorbidity, Onset, Animal Contact, HCW, Secondary Case, Female
+# Age, Comorbidity, Onset, Animal Contact, HCW, Secondary Case, Female, Saudi
 # Not yet thrilled with these estimates
 
 b.out <- NULL
 se.out <- NULL
 for(i in 1:mi.mers$m){
-  uni.out <- glm(sev ~ age + onset + comorbidity + HCW + secondary + female, 
+  uni.out <- glm(sev ~ age + onset + comorbidity + HCW + secondary + female + saudi, 
                  family= poisson,data=mi.mers$imputations[[i]])
   b.out <- rbind(b.out,uni.out$coef)
   se.out <- rbind(se.out, coeftest(uni.out,vcov=sandwich)[,2])
@@ -417,12 +416,14 @@ Death0 <- subset(MERS, Death == 0)
 Death1den <- density(Death1$age, na.rm=TRUE)
 Death0den <- density(Death0$age, na.rm=TRUE)
 
-par(mar=c(5.1,5.1,4.1,2.1))
-plot(Death1den, col="black", lwd = 3,xlab="Age (Years)",ylab = "Density", main="", cex.lab=1.5,axes=FALSE,xlim=c(0,100),ylim=c(0,0.030))
-axis(2, cex.axis=1.3, at=c(0.005,0.015,0.025),lwd=1)
-axis(1, cex.axis=1.3)
-box()
-lines(Death0den, col="grey75", lwd = 3)
-legend("topright", c("Fatal Cases","Non-Fatal Cases"), lwd=3, col=c("black","grey75"),
-       lty=c(1,1), pch=c(NA,NA), bty='n',inset=0.02, cex=1.3)
+par(mar=c(5.1,7.1,4.1,2.1))
+plot(Death1den,col="black", lwd = 3,xlab="Age, years",ylab="", main="", 
+     cex.lab=1.3,axes=FALSE,bty="n",xlim=c(0,100),ylim=c(0,0.03))
+axis(2, cex.axis=1.3,lwd=2,las=2,col="black")
+mtext("Density", side=2, line=5, cex=1.3,las=3)
+axis(1, cex.axis=1.3,las=1,,lwd=2,col="black",line=-0.9)
+abline(h=0, lty=1, col="black",lwd=2)
+lines(Death0den, col="black", lwd = 3,lty=2)
+legend("topright", c("Fatal Cases","Nonfatal Cases"), lwd=3, col="black",
+       lty=c(1,2), pch=c(NA,NA), bty='y',inset=0.1, cex=1.3,box.lwd=2)
 
